@@ -1,124 +1,149 @@
 package studentmanagement.service;
 
-import javax.xml.transform.Result;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Scanner;
 
 public class StudentService {
-    public void addStudent(Connection con, Scanner sc) throws SQLException {
+    
+    public void addStudent(Connection con, Scanner sc) {
+        try {
+            System.out.print("Enter Student Name: ");
+            String name = sc.nextLine();
 
+            System.out.print("Enter Student Email: ");
+            String email = sc.nextLine();
 
+            System.out.print("Enter Student Phone: ");
+            String phone = sc.nextLine();
 
-        System.out.print("Enter Student Name : ");
-        String name = sc.nextLine();
-
-        System.out.print("Enter Student Email : ");
-        String email = sc.nextLine();
-
-        System.out.print("Enter Student Phone : ");
-        String phone = sc.nextLine();
-
-        String sql = "INSERT INTO students (student_name, email, phone) VALUES (?, ?, ?)";;
-
-        PreparedStatement statement = con.prepareStatement(sql);
-        statement.setString(1,name);
-        statement.setString(2,email);
-        statement.setString(3,phone);
-
-        statement.executeUpdate();
-
-        System.out.println("---------------Inserted Successfully------------------");
-    }
-    public void fetchAllStudent(Connection con) throws SQLException {
-        String sql = "SELECT * FROM students";
-        Statement statement = con.createStatement();
-
-        try(ResultSet result = statement.executeQuery(sql)){
-            displayDetails(result);
-
-        }
-
-    }
-
-    public void fetchByName(Connection con, String name) throws SQLException {
-        String sql = "SELECT * FROM students where student_name = ?";
-        try(PreparedStatement statement = con.prepareStatement(sql)){
-            statement.setString(1,name);
-
-            try(ResultSet result = statement.executeQuery()){
-                displayDetails(result);
-
+            if (!email.contains("@") || !email.contains(".")) {
+                System.out.println("Invalid email format.");
+                return;
             }
-        }
-    }
-
-    public void fetchById(Connection con, int id) throws SQLException {
-
-        String sql = "SELECT * FROM students WHERE student_id = ?";
-
-        try (PreparedStatement statement = con.prepareStatement(sql)) {
-
-            statement.setInt(1, id);
-
-            try (ResultSet result = statement.executeQuery()) {
-                displayDetails(result);
+            
+            if (phone.length() != 10) {
+                System.out.println("Phone number must be 10 digits.");
+                return;
             }
+
+            String sql = "INSERT INTO students (student_name, email, phone) VALUES (?, ?, ?)";
+            PreparedStatement pstmt = con.prepareStatement(sql);
+            pstmt.setString(1, name);
+            pstmt.setString(2, email);
+            pstmt.setString(3, phone);
+
+            pstmt.executeUpdate();
+            pstmt.close();
+
+            System.out.println("---------------Inserted Successfully------------------");
+            
+        } catch (Exception e) {
+            System.out.println("Error adding student: " + e.getMessage());
+        }
+    }
+    
+    public void fetchAllStudent(Connection con) {
+        try {
+            String sql = "SELECT * FROM students";
+            Statement stmt = con.createStatement();
+            ResultSet rs = stmt.executeQuery(sql);
+            
+            displayDetails(rs);
+            
+            rs.close();
+            stmt.close();
+        } catch (Exception e) {
+            System.out.println("Error: " + e.getMessage());
         }
     }
 
-    public void updateEmail(Connection con, String newEmail, int id)throws SQLException {
-        String sql = "UPDATE students set email = ? where student_id = ?";
-        int rows = 0;
-        try(PreparedStatement statement = con.prepareStatement(sql)){
-            statement.setString(1,newEmail);
-            statement.setInt(2,id);
-             rows = statement.executeUpdate();
-        }
+    public void fetchByName(Connection con, String name) {
+        try {
+            String sql = "SELECT * FROM students WHERE student_name = ?";
+            PreparedStatement pstmt = con.prepareStatement(sql);
+            pstmt.setString(1, name);
 
-        if (rows == 0){
-            System.out.println("No Record Found");
-        }
-        else {
-            System.out.println("Email Updated");
-        }
-    }
-
-    public void updatePhone(Connection con, String phone, int id)throws SQLException {
-        String sql = "UPDATE students set phone = ? where student_id = ?";
-        int rows = 0;
-        try(PreparedStatement statement = con.prepareStatement(sql)){
-            statement.setString(1,phone);
-            statement.setInt(2,id);
-            rows = statement.executeUpdate();
-        }
-
-
-        if (rows == 0){
-            System.out.println("No Record Found");
-        } else {
-            System.out.println("Phone updated successfully");
+            ResultSet rs = pstmt.executeQuery();
+            displayDetails(rs);
+            
+            rs.close();
+            pstmt.close();
+        } catch (Exception e) {
+             System.out.println("Error: " + e.getMessage());
         }
     }
 
+    public void fetchById(Connection con, int id) {
+        try {
+            String sql = "SELECT * FROM students WHERE student_id = ?";
+            PreparedStatement pstmt = con.prepareStatement(sql);
+            pstmt.setInt(1, id);
 
-    public  void displayDetails(ResultSet result) throws SQLException {
+            ResultSet rs = pstmt.executeQuery();
+            displayDetails(rs);
+            
+            rs.close();
+            pstmt.close();
+        } catch (Exception e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+    }
+
+    public void updateEmail(Connection con, String newEmail, int id) {
+        try {
+            String sql = "UPDATE students SET email = ? WHERE student_id = ?";
+            PreparedStatement pstmt = con.prepareStatement(sql);
+            pstmt.setString(1, newEmail);
+            pstmt.setInt(2, id);
+            
+            int rows = pstmt.executeUpdate();
+            pstmt.close();
+            
+            if (rows == 0) {
+                System.out.println("No Record Found");
+            } else {
+                System.out.println("Email Updated Successfully");
+            }
+        } catch (Exception e) {
+             System.out.println("Error: " + e.getMessage());
+        }
+    }
+
+    public void updatePhone(Connection con, String phone, int id) {
+        try {
+            String sql = "UPDATE students SET phone = ? WHERE student_id = ?";
+            PreparedStatement pstmt = con.prepareStatement(sql);
+            pstmt.setString(1, phone);
+            pstmt.setInt(2, id);
+            
+            int rows = pstmt.executeUpdate();
+            pstmt.close();
+
+            if (rows == 0){
+                System.out.println("No Record Found");
+            } else {
+                System.out.println("Phone updated successfully");
+            }
+        } catch (Exception e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+    }
+
+    public void displayDetails(ResultSet rs) throws Exception {
         boolean found = false;
-
-        while (result.next()){
+        while (rs.next()) {
             found = true;
-            System.out.println("Student ID : "+result.getInt("student_id") + " | "+ "Student Name : "+result.getString("student_name") + " | "+"Email : "+result.getString("email")+ " | "+"Phone : "+result.getString("phone"));
+            System.out.println("Student ID: " + rs.getInt("student_id") + 
+                               " | Name: " + rs.getString("student_name") + 
+                               " | Email: " + rs.getString("email") + 
+                               " | Phone: " + rs.getString("phone"));
         }
 
         if (!found){
-            System.out.println("No students found");
+            System.out.println("No students found.");
         }
-    }
-
-
-    public boolean isEmailValid(String email) {
-        return email != null
-                && (email.endsWith("@gmail.com")
-                || email.endsWith("@yahoo.com")
-                || email.endsWith("@outlook.com"));
     }
 }

@@ -1,6 +1,5 @@
 package bankingmanagement.service;
 
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -8,80 +7,62 @@ import java.util.Scanner;
 
 public class CustomerService {
 
-    public void customerRegistration(Connection con, Scanner sc) throws SQLException {
+    public void registerCustomer(Connection con, Scanner sc) throws SQLException {
+        System.out.print("Enter customer name: ");
+        String name = sc.nextLine();
 
-        System.out.println("Enter customer name: ");
-        String name = sc.next();
+        System.out.print("Enter email: ");
+        String email = sc.nextLine();
 
-        System.out.println("Enter email: ");
-        String email = sc.next();
-        sc.nextLine();
-
-
-        System.out.println("Enter phone number: ");
+        System.out.print("Enter phone number: ");
         String phone = sc.nextLine();
 
-        System.out.println("Enter address: ");
-        String address = sc.next();
+        System.out.print("Enter address: ");
+        String address = sc.nextLine();
 
-
-        if (name.isEmpty() || address.isEmpty()) {
+        if (name.trim().isEmpty() || address.trim().isEmpty()) {
             throw new IllegalArgumentException("Name and address cannot be empty.");
         }
 
-        if (!isEmailValid(email)) {
-            throw new IllegalArgumentException("Invalid email address.");
+        if (!email.contains("@") || !email.contains(".")) {
+            throw new IllegalArgumentException("Invalid email format.");
         }
 
-        if (!phone.matches("[0-9]{10}")) {
-            throw new IllegalArgumentException("Phone number must contain exactly 10 digits.");
+        if (phone.length() != 10) {
+            throw new IllegalArgumentException("Phone number must be 10 digits.");
         }
 
-        String sql = """
-                INSERT INTO customers
-                (customer_name, email, phone, address)
-                VALUES (?, ?, ?, ?)
-                """;
+        String sql = "INSERT INTO customers (customer_name, email, phone, address) VALUES (?, ?, ?, ?)";
+        
+        PreparedStatement pstmt = con.prepareStatement(sql);
+        pstmt.setString(1, name);
+        pstmt.setString(2, email);
+        pstmt.setString(3, phone);
+        pstmt.setString(4, address);
 
-        try (PreparedStatement statement = con.prepareStatement(sql)) {
+        pstmt.executeUpdate();
+        pstmt.close();
 
-            statement.setString(1, name);
-            statement.setString(2, email);
-            statement.setString(3, phone);
-            statement.setString(4, address);
-
-            statement.executeUpdate();
-
-            System.out.println("Customer registered successfully.");
-        }
+        System.out.println("Customer registered successfully!");
     }
 
     public void updatePhone(Connection con, int customerId, String newPhone) throws SQLException {
-        if (!newPhone.matches("[0-9]{10}")) {
-            throw new IllegalArgumentException("Phone number must contain exactly 10 digits.");
+        if (newPhone.length() != 10) {
+            throw new IllegalArgumentException("Phone number must be exactly 10 digits.");
         }
+        
         String sql = "UPDATE customers SET phone = ? WHERE customer_id = ?";
+        PreparedStatement pstmt = con.prepareStatement(sql);
+        pstmt.setString(1, newPhone);
+        pstmt.setInt(2, customerId);
 
-        try(PreparedStatement statement = con.prepareStatement(sql)){
-            statement.setString(1,newPhone);
-            statement.setInt(2,customerId);
-
-
-
-            int rows = statement.executeUpdate();
-            if (rows == 0){
-                throw new IllegalArgumentException("Invalid Customer ID");
-            }
-            else {
-                System.out.println("Updated Successfully");
-            }
+        int rows = pstmt.executeUpdate();
+        pstmt.close();
+        
+        if (rows > 0) {
+            System.out.println("Phone number updated successfully.");
+        } else {
+            System.out.println("Customer ID not found.");
         }
-    }
-    public boolean isEmailValid(String email) {
-        return email != null
-                && (email.endsWith("@gmail.com")
-                || email.endsWith("@yahoo.com")
-                || email.endsWith("@outlook.com"));
     }
 }
-

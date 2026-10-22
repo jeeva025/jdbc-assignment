@@ -1,253 +1,163 @@
 package bankingmanagement.service;
 
-
-import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Scanner;
 
-
 public class AccountService {
 
-    public void accountCreation(Connection con, Scanner sc)
-            throws SQLException {
-
+    public void createAccount(Connection con, Scanner sc) throws SQLException {
         System.out.print("Enter customer ID: ");
-        int customerId = sc.nextInt();
-        sc.nextLine();
+        int customerId = Integer.parseInt(sc.nextLine());
 
         System.out.print("Enter account number: ");
-        String accountNumber = sc.nextLine();
+        String accNum = sc.nextLine();
 
         System.out.print("Enter account type (SAVINGS/CURRENT/SALARY/FD): ");
-        String accountType = sc.nextLine().trim().toUpperCase();
+        String accType = sc.nextLine().toUpperCase();
 
-
-
-        if (!accountType.matches("SAVINGS|CURRENT|SALARY|FD")) {
+        if (!accType.equals("SAVINGS") && !accType.equals("CURRENT") && !accType.equals("SALARY") && !accType.equals("FD")) {
             throw new IllegalArgumentException("Invalid account type.");
         }
 
-        if (!isCustomerExists(con, customerId)) {
-            throw new IllegalArgumentException("Customer not found.");
-        }
+        String sql = "INSERT INTO accounts (customer_id, account_number, account_type, balance) VALUES (?, ?, ?, 0.00)";
+        
+        PreparedStatement pstmt = con.prepareStatement(sql);
+        pstmt.setInt(1, customerId);
+        pstmt.setString(2, accNum);
+        pstmt.setString(3, accType);
 
-        if (isAccountNumberExists(con, accountNumber)) {
-            throw new IllegalArgumentException("Account number already exists.");
-        }
+        pstmt.executeUpdate();
+        pstmt.close();
 
-        String sql = """
-                INSERT INTO accounts
-                (customer_id, account_number, account_type, balance)
-                VALUES (?, ?, ?, 0.00)
-                """;
-
-        try (PreparedStatement statement = con.prepareStatement(sql)) {
-
-            statement.setInt(1, customerId);
-            statement.setString(2, accountNumber);
-            statement.setString(3, accountType);
-
-            statement.executeUpdate();
-
-            System.out.println("Account created successfully.");
-            System.out.println("Account number: " + accountNumber);
-        }
+        System.out.println("Account created successfully. Account Number: " + accNum);
     }
 
-    public void deposit(Connection con, String accountNumber, BigDecimal amount)
-            throws SQLException {
-
-        validateAmount(amount);
-
-        if (!isAccountNumberExists(con, accountNumber)) {
-            throw new IllegalArgumentException("Account not found.");
+    public void deposit(Connection con, String accNum, double amount) throws SQLException {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Deposit amount must be greater than zero.");
         }
 
-        String sql = """
-                UPDATE accounts
-                SET balance = balance + ?
-                WHERE account_number = ? AND status = 'ACTIVE'
-                """;
-
-        String transactionSQL = """
-                INSERT INTO transactions
-                (account_id, transaction_type, amount, status, description)
-                SELECT account_id, 'DEPOSIT', ?, 'SUCCESS', 'Cash deposit'
-                FROM accounts
-                WHERE account_number = ? AND status = 'ACTIVE'
-                """;
-
-        insertTransaction(
-                con, sql, transactionSQL, accountNumber, amount);
-
-        System.out.println("Deposit successful.");
-    }
-
-    public void withdrawal(Connection con, String accountNumber, BigDecimal amount)
-            throws SQLException {
-
-        validateAmount(amount);
-
-        if (!isAccountNumberExists(con, accountNumber)) {
-            throw new IllegalArgumentException("Account not found.");
+        int accountId = getAccountId(con, accNum);
+        if (accountId == -1) {
+            throw new IllegalArgumentException("Account not found or inactive.");
         }
-
-        String sql = """
-                UPDATE accounts
-                SET balance = balance - ?
-                WHERE account_number = ?
-                  AND status = 'ACTIVE'
-                  AND balance >= ?
-                """;
-
-        String transactionSQL = """
-                INSERT INTO transactions
-                (account_id, transaction_type, amount, status, description)
-                SELECT account_id, 'WITHDRAWAL', ?, 'SUCCESS', 'Cash withdrawal'
-                FROM accounts
-                WHERE account_number = ? AND status = 'ACTIVE'
-                """;
-
-        insertTransaction(con, sql, transactionSQL, accountNumber, amount);
-
-        System.out.println("Withdrawal successful.");
-    }
-
-    private void insertTransaction(
-            Connection con,
-            String balanceSQL,
-            String transactionSQL,
-            String accountNumber,
-            BigDecimal amount) throws SQLException {
-
-        boolean previousAutoCommit = con.getAutoCommit();
 
         try {
             con.setAutoCommit(false);
 
-            int updatedRows;
+            String updateSql = "UPDATE accounts SET balance = balance + ? WHERE account_id = ?";
+            PreparedStatement updateStmt = con.prepareStatement(updateSql);
+            updateStmt.setDouble(1, amount);
+            updateStmt.setInt(2, accountId);
+            updateStmt.executeUpdate();
+            updateStmt.close();
 
-            try (PreparedStatement statement =
-                         con.prepareStatement(balanceSQL)) {
-
-                statement.setBigDecimal(1, amount);
-                statement.setString(2, accountNumber);
-
-                if (balanceSQL.contains("balance >= ?")) {
-                    statement.setBigDecimal(3, amount);
-                }
-
-                updatedRows = statement.executeUpdate();
-            }
-
-            if (updatedRows == 0) {
-                if (!isAccountNumberExists(con, accountNumber)) {
-                    throw new IllegalArgumentException("Account not found.");
-                }
-
-                throw new IllegalArgumentException(
-                        "Account is inactive or has insufficient balance.");
-            }
-
-            try (PreparedStatement statement =
-                         con.prepareStatement(transactionSQL)) {
-
-                statement.setBigDecimal(1, amount);
-                statement.setString(2, accountNumber);
-
-                if (statement.executeUpdate() != 1) {
-                    throw new SQLException("Transaction record was not created.");
-                }
-            }
+            String txnSql = "INSERT INTO transactions (account_id, transaction_type, amount, description) VALUES (?, 'DEPOSIT', ?, 'Cash deposit')";
+            PreparedStatement txnStmt = con.prepareStatement(txnSql);
+            txnStmt.setInt(1, accountId);
+            txnStmt.setDouble(2, amount);
+            txnStmt.executeUpdate();
+            txnStmt.close();
 
             con.commit();
+            System.out.println("Deposit successful. Deposited: ₹" + amount);
 
-        } catch (SQLException | RuntimeException e) {
-            try {
-                con.rollback();
-            } catch (SQLException rollbackException) {
-                e.addSuppressed(rollbackException);
-            }
-
-            throw e;
-
+        } catch (Exception e) {
+            con.rollback();
+            throw new SQLException("Transaction failed: " + e.getMessage());
         } finally {
-            try {
-                con.setAutoCommit(previousAutoCommit);
-            } catch (SQLException e) {
-                // Connection restoration failed.
-                // Do not silently reuse a connection in an unknown state.
-                throw e;
-            }
+            con.setAutoCommit(true);
         }
     }
 
-    public void updateStatus(Connection con, String accountNumber, String status){
-        String sql = "UPDATE accounts SET status = ? WHERE account_number = ?";
+    public void withdrawal(Connection con, String accNum, double amount) throws SQLException {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Withdrawal amount must be greater than zero.");
+        }
+
+        int accountId = getAccountId(con, accNum);
+        if (accountId == -1) {
+            throw new IllegalArgumentException("Account not found or inactive.");
+        }
+
+        try {
+            con.setAutoCommit(false);
+
+            String checkSql = "SELECT balance FROM accounts WHERE account_id = ?";
+            PreparedStatement checkStmt = con.prepareStatement(checkSql);
+            checkStmt.setInt(1, accountId);
+            ResultSet rs = checkStmt.executeQuery();
+            
+            if (rs.next()) {
+                double currentBalance = rs.getDouble("balance");
+                if (currentBalance < amount) {
+                    throw new IllegalArgumentException("Insufficient balance.");
+                }
+            }
+            checkStmt.close();
+
+            String updateSql = "UPDATE accounts SET balance = balance - ? WHERE account_id = ?";
+            PreparedStatement updateStmt = con.prepareStatement(updateSql);
+            updateStmt.setDouble(1, amount);
+            updateStmt.setInt(2, accountId);
+            updateStmt.executeUpdate();
+            updateStmt.close();
+
+            String txnSql = "INSERT INTO transactions (account_id, transaction_type, amount, description) VALUES (?, 'WITHDRAWAL', ?, 'Cash withdrawal')";
+            PreparedStatement txnStmt = con.prepareStatement(txnSql);
+            txnStmt.setInt(1, accountId);
+            txnStmt.setDouble(2, amount);
+            txnStmt.executeUpdate();
+            txnStmt.close();
+
+            con.commit();
+            System.out.println("Withdrawal successful. Withdrawn: ₹" + amount);
+
+        } catch (Exception e) {
+            con.rollback();
+            throw new SQLException("Transaction failed: " + e.getMessage());
+        } finally {
+            con.setAutoCommit(true);
+        }
+    }
+
+    public void updateStatus(Connection con, String accNum, String status) throws SQLException {
         status = status.toUpperCase();
-        if (!status.matches("ACTIVE|INACTIVE")) {
-            throw new IllegalArgumentException("Invalid account type.");
+        if (!status.equals("ACTIVE") && !status.equals("INACTIVE")) {
+            throw new IllegalArgumentException("Status must be ACTIVE or INACTIVE.");
         }
 
-        try(PreparedStatement statement = con.prepareStatement(sql)){
-            statement.setString(1,status);
-            statement.setString(2,accountNumber);
+        String sql = "UPDATE accounts SET status = ? WHERE account_number = ?";
+        PreparedStatement pstmt = con.prepareStatement(sql);
+        pstmt.setString(1, status);
+        pstmt.setString(2, accNum);
 
-            int rows = statement.executeUpdate();
-            if (rows == 0){
-                throw new IllegalArgumentException("Account Not Found");
-            }
-            else {
-                System.out.println("Updated Successfully");
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-    }
+        int rows = pstmt.executeUpdate();
+        pstmt.close();
 
-    private boolean isAccountNumberExists(Connection con, String accountNumber) throws SQLException {
-
-        String sql = """
-                SELECT 1 FROM accounts
-                WHERE account_number = ?
-                """;
-
-        try (PreparedStatement statement = con.prepareStatement(sql)) {
-
-            statement.setString(1, accountNumber);
-
-            try (ResultSet rs = statement.executeQuery()) {
-                return rs.next();
-            }
+        if (rows > 0) {
+            System.out.println("Account status updated to " + status);
+        } else {
+            System.out.println("Account not found.");
         }
     }
 
-    private boolean isCustomerExists(Connection con, int customerId) throws SQLException {
-
-        String sql = """
-                SELECT 1 FROM customers
-                WHERE customer_id = ?
-                """;
-
-        try (PreparedStatement statement = con.prepareStatement(sql)) {
-
-            statement.setInt(1, customerId);
-
-            try (ResultSet rs = statement.executeQuery()) {
-                return rs.next();
-            }
+    private int getAccountId(Connection con, String accNum) throws SQLException {
+        String sql = "SELECT account_id FROM accounts WHERE account_number = ? AND status = 'ACTIVE'";
+        PreparedStatement pstmt = con.prepareStatement(sql);
+        pstmt.setString(1, accNum);
+        
+        ResultSet rs = pstmt.executeQuery();
+        int id = -1;
+        if (rs.next()) {
+            id = rs.getInt("account_id");
         }
-    }
-
-    private void validateAmount(BigDecimal amount) {
-
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Amount must be greater than zero.");
-        }
+        
+        rs.close();
+        pstmt.close();
+        return id;
     }
 }
-
-
